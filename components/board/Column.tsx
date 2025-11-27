@@ -14,7 +14,7 @@ interface ColumnProps {
 }
 
 const Column: React.FC<ColumnProps> = ({ column, onCardClick }) => {
-  const { state, addCard, updateColumn, deleteColumn } = useKanban();
+  const { state, addCard, updateColumn } = useKanban();
   const [isAddingCard, setIsAddingCard] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -40,7 +40,7 @@ const Column: React.FC<ColumnProps> = ({ column, onCardClick }) => {
   };
 
   return (
-    <div className="min-w-[320px] bg-transparent rounded-lg p-4 flex flex-col border-2 border-cosmic-border">
+    <div className="min-w-[320px] bg-cosmic-card dark:bg-cosmic-dark-card bg-opacity-50 dark:bg-opacity-30 rounded-lg p-4 flex flex-col border-2 border-cosmic-border dark:border-cosmic-dark-border">
       {/* Column Header */}
       <div className="mb-4">
         {isEditingTitle ? (
@@ -64,7 +64,7 @@ const Column: React.FC<ColumnProps> = ({ column, onCardClick }) => {
             onClick={() => setIsEditingTitle(true)}
             className="flex items-center justify-between cursor-pointer group"
           >
-            <h2 className="text-lg font-bold text-cosmic-text group-hover:text-cosmic-primary">
+            <h2 className="text-lg font-bold text-cosmic-text dark:text-cosmic-dark-text group-hover:text-cosmic-primary">
               {column.title}
             </h2>
             <span className="bg-cosmic-primary text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-semibold">

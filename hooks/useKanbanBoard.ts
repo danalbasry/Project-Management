@@ -69,10 +69,6 @@ export const useKanbanBoard = () => {
         const card = prev.cards.find((c) => c.id === cardId);
         if (!card) return prev;
 
-        const cardsInNewColumn = prev.cards.filter(
-          (c) => c.columnId === newColumnId && c.id !== cardId
-        );
-
         return {
           ...prev,
           cards: prev.cards.map((c) => {

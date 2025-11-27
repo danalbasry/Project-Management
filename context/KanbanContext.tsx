@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext } from 'react';
-import { BoardState, Card, Column } from '@/lib/types';
+import { BoardState, Card } from '@/lib/types';
 import { useKanbanBoard } from '@/hooks/useKanbanBoard';
 
 interface KanbanContextType {

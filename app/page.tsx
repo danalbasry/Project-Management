@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -9,15 +9,11 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
 import { useKanban } from '@/context/KanbanContext';
 import Column from '@/components/board/Column';
 import Card from '@/components/board/Card';
 import Button from '@/components/ui/Button';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 import CardDetailModal from '@/components/modals/CardDetailModal';
 
 export default function Home() {
@@ -28,7 +24,9 @@ export default function Home() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      distance: 8,
+      activationConstraint: {
+        distance: 8,
+      },
     })
   );
 
@@ -45,7 +43,7 @@ export default function Home() {
   if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-cosmic-text text-xl">Loading...</div>
+        <div className="text-cosmic-text dark:text-cosmic-dark-text text-xl">Loading...</div>
       </div>
     );
   }
@@ -54,7 +52,7 @@ export default function Home() {
     setActiveId(event.active.id);
   };
 
-  const handleDragOver = (event: any) => {
+  const handleDragOver = (_event: any) => {
     // Handle reordering
   };
 
@@ -87,9 +85,12 @@ export default function Home() {
     <main className="min-h-screen p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-cosmic-text mb-2">Project Board</h1>
-          <p className="text-cosmic-text-muted">Manage your projects with ease</p>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-cosmic-text dark:text-cosmic-dark-text mb-2">Project Board</h1>
+            <p className="text-cosmic-text-muted dark:text-cosmic-dark-text-muted">Manage your projects with ease</p>
+          </div>
+          <ThemeToggle />
         </div>
 
         {/* Clear Demo Data Button */}

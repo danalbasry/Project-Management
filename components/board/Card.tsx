@@ -34,6 +34,19 @@ const Card: React.FC<CardProps> = ({ card, isDragging, onClick }) => {
 
   const isBeingDragged = isDragging || isSortableDragging;
 
+  const getPriorityStyles = (priority: string) => {
+    switch (priority) {
+      case 'high':
+        return 'bg-red-100 text-red-700 dark:bg-red-900 dark:bg-opacity-40 dark:text-red-400';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:bg-opacity-40 dark:text-yellow-400';
+      case 'low':
+        return 'bg-green-100 text-green-700 dark:bg-green-900 dark:bg-opacity-40 dark:text-green-400';
+      default:
+        return '';
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
@@ -41,7 +54,7 @@ const Card: React.FC<CardProps> = ({ card, isDragging, onClick }) => {
       {...attributes}
       {...listeners}
       onClick={handleClick}
-      className={`bg-cosmic-card rounded-lg p-4 shadow-md hover:shadow-lg transition-all duration-200 cursor-grab active:cursor-grabbing border border-cosmic-border ${
+      className={`bg-cosmic-card dark:bg-cosmic-dark-card rounded-lg p-4 shadow-md hover:shadow-lg transition-all duration-200 cursor-grab active:cursor-grabbing border border-cosmic-border dark:border-cosmic-dark-border ${
         isBeingDragged ? 'opacity-75 scale-105' : ''
       } ${card.isDemo ? 'border-2 border-cosmic-primary' : ''}`}
     >
@@ -51,10 +64,10 @@ const Card: React.FC<CardProps> = ({ card, isDragging, onClick }) => {
         </div>
       )}
 
-      <h3 className="font-semibold text-cosmic-text mb-2">{card.title}</h3>
+      <h3 className="font-semibold text-cosmic-text dark:text-cosmic-dark-text mb-2">{card.title}</h3>
 
       {card.description && (
-        <p className="text-cosmic-text-muted text-sm mb-3 line-clamp-3">
+        <p className="text-cosmic-text-muted dark:text-cosmic-dark-text-muted text-sm mb-3 line-clamp-3">
           {card.description}
         </p>
       )}
@@ -62,13 +75,7 @@ const Card: React.FC<CardProps> = ({ card, isDragging, onClick }) => {
       <div className="flex items-center gap-2 flex-wrap">
         {card.priority && (
           <span
-            className={`text-xs font-semibold px-2 py-1 rounded ${
-              card.priority === 'high'
-                ? 'bg-red-100 text-red-700'
-                : card.priority === 'medium'
-                ? 'bg-yellow-100 text-yellow-700'
-                : 'bg-green-100 text-green-700'
-            }`}
+            className={`text-xs font-semibold px-2 py-1 rounded ${getPriorityStyles(card.priority)}`}
           >
             {card.priority.charAt(0).toUpperCase() + card.priority.slice(1)}
           </span>
@@ -79,7 +86,7 @@ const Card: React.FC<CardProps> = ({ card, isDragging, onClick }) => {
             {card.tags.map((tag) => (
               <span
                 key={tag}
-                className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded"
+                className="text-xs bg-cosmic-border dark:bg-cosmic-dark-border text-cosmic-text-muted dark:text-cosmic-dark-text-muted px-2 py-1 rounded"
               >
                 {tag}
               </span>
