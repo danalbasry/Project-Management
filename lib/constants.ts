@@ -1,0 +1,86 @@
+import { BoardState } from './types';
+
+export const DEFAULT_COLUMNS = [
+  { id: 'todo', title: 'To Do', order: 0, createdAt: new Date().toISOString() },
+  { id: 'in-progress', title: 'In Progress', order: 1, createdAt: new Date().toISOString() },
+  { id: 'done', title: 'Completed', order: 2, createdAt: new Date().toISOString() },
+];
+
+export const DEMO_BOARD_STATE: BoardState = {
+  columns: DEFAULT_COLUMNS,
+  cards: [
+    {
+      id: 'card-1',
+      title: 'Design kanban board layout',
+      description: 'Create beautiful UI with Tailwind CSS and matching the design reference',
+      columnId: 'todo',
+      order: 0,
+      priority: 'high',
+      tags: ['design', 'ui'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isDemo: true,
+    },
+    {
+      id: 'card-2',
+      title: 'Implement drag and drop',
+      description: 'Integrate @dnd-kit for smooth card dragging between columns',
+      columnId: 'todo',
+      order: 1,
+      priority: 'high',
+      tags: ['feature', 'interaction'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isDemo: true,
+    },
+    {
+      id: 'card-3',
+      title: 'Set up state management',
+      description: 'Create React Context and custom hooks for board state',
+      columnId: 'in-progress',
+      order: 0,
+      priority: 'high',
+      tags: ['architecture'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isDemo: true,
+    },
+    {
+      id: 'card-4',
+      title: 'Add local storage persistence',
+      description: 'Implement localStorage with debounced auto-save',
+      columnId: 'in-progress',
+      order: 1,
+      priority: 'medium',
+      tags: ['feature', 'storage'],
+      dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isDemo: true,
+    },
+    {
+      id: 'card-5',
+      title: 'Configure Tailwind CSS',
+      description: 'Set up animations and gradient background',
+      columnId: 'done',
+      order: 0,
+      tags: ['styling'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isDemo: true,
+    },
+    {
+      id: 'card-6',
+      title: 'Create UI components',
+      description: 'Build reusable Button, Input, and Textarea components',
+      columnId: 'done',
+      order: 1,
+      tags: ['components'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isDemo: true,
+    },
+  ],
+};
+
+export const STORAGE_KEY = 'kanban-board-state';
