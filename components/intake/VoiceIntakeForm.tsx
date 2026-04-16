@@ -306,7 +306,7 @@ export default function VoiceIntakeForm() {
         }
         const text = (data.text || '').trim();
         if (!text) {
-          setError("Didn't catch that — try recording again.");
+          setError("Didn't catch that. Try recording again.");
           return;
         }
         setDraftText((prev) => (prev ? `${prev} ${text}` : text));
@@ -566,7 +566,7 @@ export default function VoiceIntakeForm() {
               <div className="flex flex-1 flex-wrap justify-end gap-2 sm:flex-initial">
                 {phase === 'interviewing' && (
                   <button
-                    onClick={() => submitAnswer('Skip — not applicable')}
+                    onClick={() => submitAnswer('Skip, not applicable')}
                     disabled={thinking || transcribing}
                     className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 disabled:opacity-40"
                     title="Mark this question as not applicable and move on"
