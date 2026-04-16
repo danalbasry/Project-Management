@@ -1,6 +1,49 @@
-# Kanban Board - Project Management App
+# Kanban Board + GTM Voice Intake
 
-A beautiful, interactive kanban board application built with Next.js, React, Tailwind CSS, and @dnd-kit for drag-and-drop functionality.
+A beautiful, interactive kanban board built with Next.js, React, Tailwind CSS, and @dnd-kit — now paired with a **voice-operated GTM Ops project intake form** powered by OpenAI Whisper (transcription) and Claude (interviewer + summary generation).
+
+## Voice Intake Form (`/intake`)
+
+Route: `/intake`
+
+An AI interviewer walks the user through the 8-question GTM Ops project intake:
+
+1. Outcome
+2. Who Benefits & Urgency
+3. Scope & Data
+4. Existing Materials
+5. Ownership & Approvals
+6. Constraints & Out of Scope
+7. Success Criteria
+8. Context & History
+
+The user clicks the mic (or presses `Space`), speaks their answer, Whisper transcribes, and Claude decides whether to ask a follow-up or advance to the next question. At the end, Claude produces a PM-ready summary in markdown that the user can copy or download.
+
+### Environment variables
+
+Both keys are required and server-side only. Copy `.env.example` to `.env.local`:
+
+```bash
+cp .env.example .env.local
+```
+
+Then fill in:
+
+- `OPENAI_API_KEY` — used by `POST /api/transcribe` for Whisper.
+- `ANTHROPIC_API_KEY` — used by `POST /api/interview` for Claude.
+
+The keys are never exposed to the browser.
+
+### How the voice intake flow works
+
+- `hooks/useVoiceRecorder.ts` — MediaRecorder + Web Audio API analyser for live waveform levels.
+- `components/intake/VoiceIntakeForm.tsx` — client component that orchestrates recording → transcription → Claude turn.
+- `app/api/transcribe/route.ts` — proxies the audio Blob to OpenAI Whisper (`whisper-1`).
+- `app/api/interview/route.ts` — sends the conversation history to Claude (`claude-sonnet-4-6`) with a strict system prompt. Claude replies with JSON indicating whether it's asking a follow-up, moving to the next question, awaiting confirmation, or finalizing the summary.
+
+## Kanban Board
+
+The kanban board remains at `/`.
 
 ## Features
 
