@@ -115,6 +115,8 @@ export default function VoiceIntakeForm() {
     const existing = loadDraft();
     if (existing && existing.turns.length > 0) {
       setPendingDraft(existing);
+    } else {
+      setStarted(true);
     }
   }, []);
 
@@ -408,24 +410,18 @@ export default function VoiceIntakeForm() {
   const discardDraft = useCallback(() => {
     setPendingDraft(null);
     clearDraft();
-  }, []);
-
-  const beginInterview = useCallback(() => {
     setStarted(true);
   }, []);
 
   const heroMessage = useMemo(() => {
-    if (!started) {
-      return 'Click the mic and answer out loud, or type. An AI interviewer walks you through 8 questions, asks a follow-up if an answer is vague, and produces a PM-ready summary.';
-    }
     if (phase === 'complete') {
-      return 'Interview complete. Copy the summary below and send it to whoever requested the intake.';
+      return 'Interview complete. Copy the summary below.';
     }
     if (phase === 'awaiting_confirmation') {
       return 'Review the draft summary. Say or type any corrections, or confirm to finalize.';
     }
     return currentPrompt ?? 'Listening…';
-  }, [currentPrompt, phase, started]);
+  }, [currentPrompt, phase]);
 
   const showQuestionMeta =
     started && phase === 'interviewing' && currentQuestionMeta;
@@ -459,8 +455,9 @@ export default function VoiceIntakeForm() {
         </div>
       )}
 
-      <ProgressTrack currentQuestion={currentQuestion} phase={phase} />
+      {started && <ProgressTrack currentQuestion={currentQuestion} phase={phase} />}
 
+      {started && (
       <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-2xl backdrop-blur sm:p-8">
         <div className="pointer-events-none absolute -top-32 -right-24 h-80 w-80 rounded-full bg-cosmic-primary/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-cosmic-accent/20 blur-3xl" />
@@ -486,14 +483,7 @@ export default function VoiceIntakeForm() {
             active={recorder.status === 'recording'}
           />
 
-          {!started ? (
-            <button
-              onClick={beginInterview}
-              className="w-full rounded-full bg-gradient-to-r from-cosmic-primary to-cosmic-accent px-6 py-3 text-base font-semibold text-white shadow-lg shadow-cosmic-primary/30 transition hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-cosmic-primary-light/40 sm:w-auto sm:px-8"
-            >
-              Start the interview
-            </button>
-          ) : phase === 'complete' ? (
+          {phase === 'complete' ? (
             <button
               onClick={resetAll}
               className="rounded-full bg-gradient-to-r from-cosmic-primary to-cosmic-accent px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cosmic-primary/30 transition hover:scale-[1.02]"
@@ -526,6 +516,7 @@ export default function VoiceIntakeForm() {
           )}
         </div>
       </section>
+      )}
 
       {started && (
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">
