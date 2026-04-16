@@ -14,6 +14,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import Link from 'next/link';
 import { useKanban } from '@/context/KanbanContext';
 import Column from '@/components/board/Column';
 import Card from '@/components/board/Card';
@@ -87,9 +88,33 @@ export default function Home() {
     <main className="min-h-screen p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-cosmic-text mb-2">Project Board</h1>
-          <p className="text-cosmic-text-muted">Manage your projects with ease</p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-bold text-cosmic-text mb-2">Project Board</h1>
+            <p className="text-cosmic-text-muted">Manage your projects with ease</p>
+          </div>
+          <Link
+            href="/intake"
+            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-cosmic-primary to-cosmic-accent px-4 py-2 text-sm font-semibold text-white shadow-md shadow-cosmic-primary/30 transition hover:scale-[1.02]"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="9" y="2" width="6" height="12" rx="3" />
+              <path d="M5 10v2a7 7 0 0 0 14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="22" />
+              <line x1="8" y1="22" x2="16" y2="22" />
+            </svg>
+            Voice Intake
+          </Link>
         </div>
 
         {/* Clear Demo Data Button */}
