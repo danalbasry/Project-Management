@@ -7,6 +7,12 @@ export const maxDuration = 60;
 
 type Turn = { role: 'user' | 'assistant'; content: string };
 
+type InterviewRequestBody = {
+  history?: Turn[];
+  currentQuestionNumber?: number;
+  followUpCountForCurrent?: number;
+};
+
 type InterviewResponse =
   | {
       phase: 'interviewing';
@@ -49,6 +55,28 @@ function extractJson(text: string): InterviewResponse | null {
   return null;
 }
 
+function buildSystemPrompt(
+  currentQuestionNumber: number | undefined,
+  followUpCountForCurrent: number | undefined
+) {
+  if (
+    typeof currentQuestionNumber !== 'number' ||
+    typeof followUpCountForCurrent !== 'number'
+  ) {
+    return INTAKE_SYSTEM_PROMPT;
+  }
+  const atLimit = followUpCountForCurrent >= 2;
+  const state = `\n\nCURRENT STATE (enforce this strictly):
+- Current question number: ${currentQuestionNumber}
+- Follow-ups already asked on this question: ${followUpCountForCurrent}
+- ${
+    atLimit
+      ? 'FOLLOW-UP LIMIT REACHED. Do NOT ask another follow-up on this question. Accept the user\'s latest answer and either advance to the next question (set is_follow_up: false, current_question_number to the next one) or, if question 8 is already answered, move to the awaiting_confirmation phase.'
+      : `You may ask up to ${2 - followUpCountForCurrent} more follow-up(s) on this question if the answer is vague or incomplete.`
+  }`;
+  return INTAKE_SYSTEM_PROMPT + state;
+}
+
 export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
@@ -57,7 +85,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { history?: Turn[] };
+  let body: InterviewRequestBody;
   try {
     body = await req.json();
   } catch {
@@ -71,13 +99,18 @@ export async function POST(req: NextRequest) {
       ? [{ role: 'user', content: 'Begin the interview.' }]
       : history.map((t) => ({ role: t.role, content: t.content }));
 
+  const system = buildSystemPrompt(
+    body.currentQuestionNumber,
+    body.followUpCountForCurrent
+  );
+
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   try {
     const result = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
-      system: INTAKE_SYSTEM_PROMPT,
+      system,
       messages,
     });
 

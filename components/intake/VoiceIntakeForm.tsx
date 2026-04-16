@@ -2,16 +2,24 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import { INTAKE_QUESTIONS } from '@/lib/intakePrompt';
 import AudioVisualizer from './AudioVisualizer';
 import MicrophoneButton from './MicrophoneButton';
 import ProgressTrack from './ProgressTrack';
 import ConversationLog, { ChatTurn } from './ConversationLog';
 import SummaryView from './SummaryView';
+import QuestionGoal from './QuestionGoal';
 
 type Phase = 'interviewing' | 'awaiting_confirmation' | 'complete';
 
 type AssistantState =
-  | { phase: 'interviewing'; questionNumber: number; questionTitle: string; isFollowUp: boolean; message: string }
+  | {
+      phase: 'interviewing';
+      questionNumber: number;
+      questionTitle: string;
+      isFollowUp: boolean;
+      message: string;
+    }
   | { phase: 'awaiting_confirmation'; message: string; summary: string }
   | { phase: 'complete'; message: string; summary: string };
 
@@ -27,8 +35,62 @@ type InterviewApiResponse =
   | { phase: 'complete'; message: string; summary_markdown: string }
   | { error: string; raw?: string };
 
+type HistoryTurn = { role: 'user' | 'assistant'; content: string };
+
+type DraftSnapshot = {
+  version: 1;
+  turns: ChatTurn[];
+  assistant: AssistantState | null;
+  history: HistoryTurn[];
+  followUpCounts: Record<number, number>;
+  savedAt: string;
+};
+
+const DRAFT_KEY = 'gtm-intake-draft-v1';
+
 function uid() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function loadDraft(): DraftSnapshot | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DraftSnapshot;
+    if (parsed?.version !== 1) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(snapshot: DraftSnapshot) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(snapshot));
+  } catch {}
+}
+
+function clearDraft() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(DRAFT_KEY);
+  } catch {}
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return '';
+  const mins = Math.max(0, Math.round((Date.now() - then) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins === 1) return '1 minute ago';
+  if (mins < 60) return `${mins} minutes ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs === 1) return '1 hour ago';
+  if (hrs < 24) return `${hrs} hours ago`;
+  const days = Math.round(hrs / 24);
+  return days === 1 ? '1 day ago' : `${days} days ago`;
 }
 
 export default function VoiceIntakeForm() {
@@ -41,28 +103,71 @@ export default function VoiceIntakeForm() {
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<DraftSnapshot | null>(null);
 
-  const historyRef = useRef<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const turnsRef = useRef<ChatTurn[]>([]);
+  const assistantRef = useRef<AssistantState | null>(null);
+  const historyRef = useRef<HistoryTurn[]>([]);
+  const followUpCountsRef = useRef<Record<number, number>>({});
   const bootstrappedRef = useRef(false);
 
-  const phase: Phase = assistant?.phase ?? 'interviewing';
-  const currentQuestion =
-    assistant && assistant.phase === 'interviewing'
-      ? assistant.questionNumber
-      : 1;
+  useEffect(() => {
+    const existing = loadDraft();
+    if (existing && existing.turns.length > 0) {
+      setPendingDraft(existing);
+    }
+  }, []);
 
-  const pushTurn = useCallback((turn: ChatTurn) => {
-    setTurns((prev) => [...prev, turn]);
+  const persist = useCallback(() => {
+    if (turnsRef.current.length === 0 && !assistantRef.current) {
+      clearDraft();
+      return;
+    }
+    saveDraft({
+      version: 1,
+      turns: turnsRef.current,
+      assistant: assistantRef.current,
+      history: historyRef.current,
+      followUpCounts: { ...followUpCountsRef.current },
+      savedAt: new Date().toISOString(),
+    });
+  }, []);
+
+  const applyTurns = useCallback((next: ChatTurn[]) => {
+    turnsRef.current = next;
+    setTurns(next);
+  }, []);
+
+  const applyAssistant = useCallback((next: AssistantState | null) => {
+    assistantRef.current = next;
+    setAssistant(next);
   }, []);
 
   const callInterview = useCallback(async () => {
     setThinking(true);
     setError(null);
     try {
+      const lastAssistant = assistantRef.current;
+      const lastAssistantQuestion =
+        lastAssistant && lastAssistant.phase === 'interviewing'
+          ? lastAssistant.questionNumber
+          : undefined;
+      const currentQuestionNumber =
+        lastAssistantQuestion ??
+        (historyRef.current.length === 0 ? 1 : undefined);
+      const followUpCountForCurrent =
+        currentQuestionNumber != null
+          ? followUpCountsRef.current[currentQuestionNumber] ?? 0
+          : 0;
+
       const res = await fetch('/api/interview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: historyRef.current }),
+        body: JSON.stringify({
+          history: historyRef.current,
+          currentQuestionNumber,
+          followUpCountForCurrent,
+        }),
       });
       const data: InterviewApiResponse = await res.json();
       if (!res.ok || 'error' in data) {
@@ -71,13 +176,13 @@ export default function VoiceIntakeForm() {
       }
 
       if (data.phase === 'interviewing') {
-        setAssistant({
-          phase: 'interviewing',
-          questionNumber: data.current_question_number,
-          questionTitle: data.current_question_title,
-          isFollowUp: data.is_follow_up,
-          message: data.message,
-        });
+        if (data.is_follow_up) {
+          followUpCountsRef.current[data.current_question_number] =
+            (followUpCountsRef.current[data.current_question_number] ?? 0) + 1;
+        } else {
+          followUpCountsRef.current[data.current_question_number] =
+            followUpCountsRef.current[data.current_question_number] ?? 0;
+        }
         const meta = data.is_follow_up
           ? `Follow-up · Q${data.current_question_number} ${data.current_question_title}`
           : `Question ${data.current_question_number} · ${data.current_question_title}`;
@@ -87,54 +192,73 @@ export default function VoiceIntakeForm() {
           content: data.message,
           meta,
         };
-        pushTurn(assistantTurn);
-        historyRef.current.push({ role: 'assistant', content: data.message });
-      } else if (data.phase === 'awaiting_confirmation') {
-        setAssistant({
-          phase: 'awaiting_confirmation',
+        applyTurns([...turnsRef.current, assistantTurn]);
+        historyRef.current = [
+          ...historyRef.current,
+          { role: 'assistant', content: data.message },
+        ];
+        applyAssistant({
+          phase: 'interviewing',
+          questionNumber: data.current_question_number,
+          questionTitle: data.current_question_title,
+          isFollowUp: data.is_follow_up,
           message: data.message,
-          summary: data.summary_markdown,
         });
+      } else if (data.phase === 'awaiting_confirmation') {
         const assistantTurn: ChatTurn = {
           id: uid(),
           role: 'assistant',
           content: data.message,
           meta: 'Review · Draft summary',
         };
-        pushTurn(assistantTurn);
-        historyRef.current.push({
-          role: 'assistant',
-          content: `${data.message}\n\n${data.summary_markdown}`,
-        });
-      } else if (data.phase === 'complete') {
-        setAssistant({
-          phase: 'complete',
+        applyTurns([...turnsRef.current, assistantTurn]);
+        historyRef.current = [
+          ...historyRef.current,
+          {
+            role: 'assistant',
+            content: `${data.message}\n\n${data.summary_markdown}`,
+          },
+        ];
+        applyAssistant({
+          phase: 'awaiting_confirmation',
           message: data.message,
           summary: data.summary_markdown,
         });
+      } else if (data.phase === 'complete') {
         const assistantTurn: ChatTurn = {
           id: uid(),
           role: 'assistant',
           content: data.message,
           meta: 'Complete · Final summary',
         };
-        pushTurn(assistantTurn);
-        historyRef.current.push({
-          role: 'assistant',
-          content: `${data.message}\n\n${data.summary_markdown}`,
+        applyTurns([...turnsRef.current, assistantTurn]);
+        historyRef.current = [
+          ...historyRef.current,
+          {
+            role: 'assistant',
+            content: `${data.message}\n\n${data.summary_markdown}`,
+          },
+        ];
+        applyAssistant({
+          phase: 'complete',
+          message: data.message,
+          summary: data.summary_markdown,
         });
       }
+      persist();
     } catch (e: any) {
       setError(e?.message || 'Failed to contact interview service.');
     } finally {
       setThinking(false);
     }
-  }, [pushTurn]);
+  }, [applyAssistant, applyTurns, persist]);
 
   useEffect(() => {
     if (!started || bootstrappedRef.current) return;
     bootstrappedRef.current = true;
-    callInterview();
+    if (turnsRef.current.length === 0) {
+      callInterview();
+    }
   }, [started, callInterview]);
 
   const submitAnswer = useCallback(
@@ -142,12 +266,16 @@ export default function VoiceIntakeForm() {
       const clean = text.trim();
       if (!clean) return;
       const userTurn: ChatTurn = { id: uid(), role: 'user', content: clean };
-      pushTurn(userTurn);
-      historyRef.current.push({ role: 'user', content: clean });
+      applyTurns([...turnsRef.current, userTurn]);
+      historyRef.current = [
+        ...historyRef.current,
+        { role: 'user', content: clean },
+      ];
       setDraftText('');
+      persist();
       await callInterview();
     },
-    [callInterview, pushTurn]
+    [applyTurns, callInterview, persist]
   );
 
   const handleMicClick = useCallback(async () => {
@@ -201,10 +329,22 @@ export default function VoiceIntakeForm() {
 
   const canSubmit = draftText.trim().length > 0 && !thinking && !transcribing;
 
+  const phase: Phase = assistant?.phase ?? 'interviewing';
+  const currentQuestion =
+    assistant && assistant.phase === 'interviewing'
+      ? assistant.questionNumber
+      : 1;
+  const currentQuestionMeta = useMemo(
+    () =>
+      INTAKE_QUESTIONS.find((q) => q.number === currentQuestion) ??
+      INTAKE_QUESTIONS[0],
+    [currentQuestion]
+  );
+
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (!started) return;
-      if (phase !== 'interviewing') return;
+      if (phase !== 'interviewing' && phase !== 'awaiting_confirmation') return;
       if (e.code === 'Space' && e.target === document.body) {
         e.preventDefault();
         handleMicClick();
@@ -218,10 +358,9 @@ export default function VoiceIntakeForm() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onKeyDown]);
 
-  const micDisabled = phase !== 'interviewing';
-
   const activeSummary =
-    assistant && (assistant.phase === 'awaiting_confirmation' || assistant.phase === 'complete')
+    assistant &&
+    (assistant.phase === 'awaiting_confirmation' || assistant.phase === 'complete')
       ? assistant.summary
       : null;
 
@@ -236,19 +375,39 @@ export default function VoiceIntakeForm() {
       : '';
 
   const recorderError = recorder.error;
-
   const displayError = error || recorderError;
 
-  const canRestart = phase === 'complete';
-
-  const restart = useCallback(() => {
+  const resetAll = useCallback(() => {
     historyRef.current = [];
+    followUpCountsRef.current = {};
     bootstrappedRef.current = false;
+    turnsRef.current = [];
+    assistantRef.current = null;
     setTurns([]);
     setAssistant(null);
     setDraftText('');
     setError(null);
     setStarted(false);
+    setPendingDraft(null);
+    clearDraft();
+  }, []);
+
+  const resumeDraft = useCallback(() => {
+    if (!pendingDraft) return;
+    historyRef.current = [...pendingDraft.history];
+    followUpCountsRef.current = { ...pendingDraft.followUpCounts };
+    bootstrappedRef.current = true;
+    turnsRef.current = [...pendingDraft.turns];
+    assistantRef.current = pendingDraft.assistant;
+    setTurns(pendingDraft.turns);
+    setAssistant(pendingDraft.assistant);
+    setPendingDraft(null);
+    setStarted(true);
+  }, [pendingDraft]);
+
+  const discardDraft = useCallback(() => {
+    setPendingDraft(null);
+    clearDraft();
   }, []);
 
   const beginInterview = useCallback(() => {
@@ -257,32 +416,68 @@ export default function VoiceIntakeForm() {
 
   const heroMessage = useMemo(() => {
     if (!started) {
-      return 'Ready to scope a GTM ops project? Click the mic and talk — an AI interviewer will walk you through 8 questions, ask follow-ups when your answer is vague, and hand back a clean summary you can paste into Teams.';
+      return 'Click the mic and answer out loud, or type. An AI interviewer walks you through 8 questions, asks a follow-up if an answer is vague, and produces a PM-ready summary.';
     }
     if (phase === 'complete') {
       return 'Interview complete. Copy the summary below and send it to whoever requested the intake.';
     }
     if (phase === 'awaiting_confirmation') {
-      return 'Review the draft summary. Say or type any changes, or confirm to finalize.';
+      return 'Review the draft summary. Say or type any corrections, or confirm to finalize.';
     }
     return currentPrompt ?? 'Listening…';
   }, [currentPrompt, phase, started]);
 
+  const showQuestionMeta =
+    started && phase === 'interviewing' && currentQuestionMeta;
+
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6 sm:gap-8">
+      {pendingDraft && !started && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-amber-400/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-amber-100">
+            <div className="font-semibold">Unfinished intake found</div>
+            <div className="text-amber-200/80">
+              Last activity {relativeTime(pendingDraft.savedAt)} ·{' '}
+              {pendingDraft.turns.filter((t) => t.role === 'user').length}{' '}
+              answer(s) so far
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={resumeDraft}
+              className="flex-1 rounded-lg bg-gradient-to-r from-cosmic-primary to-cosmic-accent px-4 py-2 text-sm font-semibold text-white sm:flex-initial"
+            >
+              Resume
+            </button>
+            <button
+              onClick={discardDraft}
+              className="flex-1 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 sm:flex-initial"
+            >
+              Start new
+            </button>
+          </div>
+        </div>
+      )}
+
       <ProgressTrack currentQuestion={currentQuestion} phase={phase} />
 
-      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-8 shadow-2xl backdrop-blur">
+      <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5 shadow-2xl backdrop-blur sm:p-8">
         <div className="pointer-events-none absolute -top-32 -right-24 h-80 w-80 rounded-full bg-cosmic-primary/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-cosmic-accent/20 blur-3xl" />
 
-        <div className="relative flex flex-col items-center gap-6 text-center">
+        <div className="relative flex flex-col items-center gap-4 text-center sm:gap-6">
           {started && currentLabel && phase === 'interviewing' && (
             <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-cosmic-primary-light">
               {currentLabel}
             </div>
           )}
-          <p className="max-w-2xl text-lg leading-relaxed text-white/90">
+          {showQuestionMeta && (
+            <QuestionGoal
+              goal={currentQuestionMeta.goal}
+              depth={currentQuestionMeta.depth}
+            />
+          )}
+          <p className="max-w-2xl text-base leading-relaxed text-white/90 sm:text-lg">
             {heroMessage}
           </p>
 
@@ -294,13 +489,13 @@ export default function VoiceIntakeForm() {
           {!started ? (
             <button
               onClick={beginInterview}
-              className="rounded-full bg-gradient-to-r from-cosmic-primary to-cosmic-accent px-8 py-3 text-base font-semibold text-white shadow-lg shadow-cosmic-primary/30 transition hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-cosmic-primary-light/40"
+              className="w-full rounded-full bg-gradient-to-r from-cosmic-primary to-cosmic-accent px-6 py-3 text-base font-semibold text-white shadow-lg shadow-cosmic-primary/30 transition hover:scale-[1.02] focus:outline-none focus:ring-4 focus:ring-cosmic-primary-light/40 sm:w-auto sm:px-8"
             >
               Start the interview
             </button>
-          ) : canRestart ? (
+          ) : phase === 'complete' ? (
             <button
-              onClick={restart}
+              onClick={resetAll}
               className="rounded-full bg-gradient-to-r from-cosmic-primary to-cosmic-accent px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cosmic-primary/30 transition hover:scale-[1.02]"
             >
               Start a new intake
@@ -310,13 +505,13 @@ export default function VoiceIntakeForm() {
               <MicrophoneButton
                 state={micState}
                 onClick={handleMicClick}
-                disabled={micDisabled && phase !== 'awaiting_confirmation'}
+                disabled={false}
               />
               <div className="text-xs text-cosmic-text-muted">
                 {recorder.status === 'recording'
                   ? 'Tap to stop · or press Space'
                   : transcribing
-                  ? 'Transcribing with Whisper…'
+                  ? 'Transcribing…'
                   : thinking
                   ? 'Claude is thinking…'
                   : 'Tap the mic to speak · or press Space · or type below'}
@@ -333,8 +528,8 @@ export default function VoiceIntakeForm() {
       </section>
 
       {started && (
-        <section className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 shadow-xl backdrop-blur">
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr]">
+          <div className="order-2 rounded-2xl border border-white/10 bg-white/[0.03] p-4 shadow-xl backdrop-blur sm:p-6 lg:order-1">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-widest text-cosmic-primary-light">
                 Conversation
@@ -343,28 +538,33 @@ export default function VoiceIntakeForm() {
                 {turns.length} turn{turns.length === 1 ? '' : 's'}
               </span>
             </div>
-            <div className="max-h-[520px] overflow-y-auto pr-2">
+            <div className="max-h-[460px] overflow-y-auto pr-1 sm:max-h-[520px] sm:pr-2">
               <ConversationLog turns={turns} />
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 shadow-xl backdrop-blur">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-widest text-cosmic-primary-light">
-              Your answer
-            </h2>
+          <div className="order-1 rounded-2xl border border-white/10 bg-white/[0.03] p-4 shadow-xl backdrop-blur sm:p-6 lg:order-2">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold uppercase tracking-widest text-cosmic-primary-light">
+                Your answer
+              </h2>
+              <span className="text-[11px] text-cosmic-text-muted">
+                Editable · Whisper transcript appears here
+              </span>
+            </div>
             <textarea
               value={draftText}
               onChange={(e) => setDraftText(e.target.value)}
               placeholder={
                 phase === 'awaiting_confirmation'
                   ? 'Confirm, or describe what to change…'
-                  : 'Transcribed text appears here. Edit before sending if you need to.'
+                  : 'Speak or type your answer. Edit before sending if Whisper mis-hears something.'
               }
-              rows={8}
+              rows={6}
               disabled={thinking || transcribing}
-              className="w-full resize-none rounded-xl border border-white/10 bg-black/30 p-4 text-sm leading-relaxed text-white placeholder:text-white/30 focus:border-cosmic-primary-light focus:outline-none focus:ring-2 focus:ring-cosmic-primary-light/40"
+              className="w-full resize-none rounded-xl border border-white/10 bg-black/30 p-3 text-sm leading-relaxed text-white placeholder:text-white/30 focus:border-cosmic-primary-light focus:outline-none focus:ring-2 focus:ring-cosmic-primary-light/40 sm:p-4"
             />
-            <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <button
                 onClick={() => setDraftText('')}
                 disabled={!draftText}
@@ -372,12 +572,22 @@ export default function VoiceIntakeForm() {
               >
                 Clear
               </button>
-              <div className="flex gap-2">
+              <div className="flex flex-1 flex-wrap justify-end gap-2 sm:flex-initial">
+                {phase === 'interviewing' && (
+                  <button
+                    onClick={() => submitAnswer('Skip — not applicable')}
+                    disabled={thinking || transcribing}
+                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 disabled:opacity-40"
+                    title="Mark this question as not applicable and move on"
+                  >
+                    Skip
+                  </button>
+                )}
                 {phase === 'awaiting_confirmation' && (
                   <button
                     onClick={() => submitAnswer('Looks good, finalize it.')}
                     disabled={thinking || transcribing}
-                    className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-40"
+                    className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-40 sm:px-4"
                   >
                     Confirm &amp; finalize
                   </button>
@@ -385,7 +595,7 @@ export default function VoiceIntakeForm() {
                 <button
                   onClick={() => submitAnswer(draftText)}
                   disabled={!canSubmit}
-                  className="rounded-lg bg-gradient-to-r from-cosmic-primary to-cosmic-accent px-4 py-2 text-sm font-semibold text-white shadow-md shadow-cosmic-primary/30 transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex-1 rounded-lg bg-gradient-to-r from-cosmic-primary to-cosmic-accent px-4 py-2 text-sm font-semibold text-white shadow-md shadow-cosmic-primary/30 transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-40 sm:flex-initial"
                 >
                   Send
                 </button>
