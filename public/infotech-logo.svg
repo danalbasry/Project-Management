@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" role="img" aria-label="Info-Tech Research Group">
+  <style>
+    .wm { font: 700 28px 'Helvetica Neue', Arial, sans-serif; letter-spacing: -0.5px; }
+    .tag { font: 500 10px 'Helvetica Neue', Arial, sans-serif; letter-spacing: 3px; }
+  </style>
+  <text x="0" y="30" class="wm" fill="#ffffff">Info-Tech</text>
+  <text x="0" y="52" class="tag" fill="#a98bff">RESEARCH GROUP</text>
+</svg>
